@@ -102,7 +102,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
         ],
-        model="llama-3.1-8b-instant",  # Groq'da hozir aniq ishlaydigan model
+        model="mixtral-8x7b-32768",  # Groq'da 100% barqaror ishlaydigan model
     )
     bot_reply = response.choices[0].message.content
     await update.message.reply_text(bot_reply)
