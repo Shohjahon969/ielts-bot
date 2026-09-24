@@ -2,7 +2,7 @@ import os
 import threading
 from collections import defaultdict
 from flask import Flask
-from groq import Groq
+import google.generativeai as genai
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,13 +13,13 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server o'chmasligi uchun Flask veb-serveri
+# Render server o'chib qolmasligi uchun Flask
 app = Flask("")
 
 
 @app.route("/")
 def home():
-  return "AI Bot faol ishlamoqda!"
+  return "Bot faol ishlamoqda!"
 
 
 def run():
@@ -29,83 +29,57 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Kalitlar
+# Telegram va Gemini API Kalitlari
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GROQ_KEY = os.environ.get("GROQ_API_KEY")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-client = Groq(api_key=GROQ_KEY)
+genai.configure(api_key=GEMINI_KEY)
 
-# Muloqot xotirasi (User Memory)
-user_chat_history = defaultdict(list)
+# Suhbat xotiralari
+user_chat_sessions = {}
 
-# 3. KUCHLI AI PROMPT (Shohjahon, samimiy do'stona muloqot va toza dizayn)
+# Tizim Yo'riqnomasi (System Prompt)
 SYSTEM_PROMPT = """
 Siz nihoyatda samimiy, do'stona, chaqqon va aqlli AI Yordamchisiz.
 
-ISMNI VA YARATUVCHINI AYTISH QOIDALARI:
+ISMNI VA YARATUVCHINI AYTISH QOIDASI:
 1. Agar sizdan "Isming nima?" deb so'ralsa, "Mening ismim Shohjahon!" deb javob bering.
-2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb g'urur bilan javob bering.
-3. Shohjahon haqida so'rashsa, uni juda iqtidorli, zakovatli va o'z ishining ustasi bo'lgan dasturchi deb samimiy maqtang.
+2. Agar sizdan "Seni kim yaratgan?" yoki "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb g'urur bilan javob bering.
+3. Shohjahon haqida so'rashsa, uni juda iqtidorli, zakovatli va kuchli dasturchi deb samimiy maqtang.
 
-MULOQOT USLUBI VA SHAKLI:
-- Foydalanuvchi bilan xuddi yaqin do'stdek (o'g'il bolaga do'st, qiz bolaga dugonadek) ochiq va samimiy gaplashing.
+MULOQOT USLUBI VA FORMAT:
+- Foydalanuvchi bilan xuddi yaqin do'stdek (o'g'il bolaga do'st, qiz bolaga dugonadek) ochiq, samimiy va erkin gaplashing.
 - Javoblaringiz londa, qisqa va tushunarli bo'lsin. Ketma-ket uzundan-uzun ma'ruza matnlarini tashlamang.
-- Matnlarda keraksiz yulduzcha (*) yoki xunuk markdown belgilardan foydalanmang!
-- Faqat ingliz tili emas, har qanday mavzuda erkin va samimiy suhbatlashing.
+- Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilar ishlatmang. Matn toza va o'qishga qulay bo'lsin.
+- Faqat ingliz tili emas, har qanday hayotiy va qiziqarli mavzularda bemalol muloqot qiling.
 """
 
-# Groq platformasida eng ishonchli va doimiy faol modellar ro'yxati
-MODELS_TO_TRY = [
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile",
-    "mixtral-8x7b-32768",
-]
 
-
-def clean_text(text):
-  """Matndagi xunuk yulduzchalarni olib tashlash"""
-  return text.replace("**", "").replace("*", "")
-
-
-def get_ai_response(user_id, user_text):
-  """Groq AI orqali suhbat xotirasini saqlab javob olish"""
-  # Xotiraga yangi xabarni qo'shish
-  user_chat_history[user_id].append({"role": "user", "content": user_text})
-
-  # Xotira hajmini cheklash (oxirgi 10 ta xabar)
-  if len(user_chat_history[user_id]) > 10:
-    user_chat_history[user_id] = user_chat_history[user_id][-10:]
-
-  messages_to_send = [{"role": "system", "content": SYSTEM_PROMPT}] + list(
-      user_chat_history[user_id]
-  )
-
-  for model in MODELS_TO_TRY:
-    try:
-      response = client.chat.completions.create(
-          messages=messages_to_send,
-          model=model,
-          temperature=0.7,
+def get_gemini_response(user_id, user_text):
+  """Gemini AI orqali suhbat xotirasini saqlab, juda tez va toza javob olish"""
+  try:
+    if user_id not in user_chat_sessions:
+      model = genai.GenerativeModel(
+          model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
       )
-      reply = response.choices[0].message.content
-      reply = clean_text(reply)
+      user_chat_sessions[user_id] = model.start_chat(history=[])
 
-      # AI javobini xotiraga saqlash
-      user_chat_history[user_id].append(
-          {"role": "assistant", "content": reply}
-      )
-      return reply
-    except Exception as e:
-      print(f"Model xatosi ({model}): {e}")
-      continue
+    chat = user_chat_sessions[user_id]
+    response = chat.send_message(user_text)
 
-  return "Suhbatda ozgina uzilish bo'ldi, do'stim. Qayta yozib ko'r-chi?"
+    # Xunuk yulduzchalarni tozalash
+    reply = response.text.replace("**", "").replace("*", "")
+    return reply
+  except Exception as e:
+    print(f"Gemini xatosi: {e}")
+    return "Ozgincha uzilish bo'ldi, do'stim. Qaytadan bir yozib ko'r-chi?"
 
 
 # /start buyrug'i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
-  user_chat_history[user_id].clear()
+  if user_id in user_chat_sessions:
+    del user_chat_sessions[user_id]
 
   keyboard = [
       [
@@ -121,7 +95,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   text = (
       "Salom! Men sizning shaxsiy AI Yordamchingizman.\n\n"
-      "Istalgan mavzuda bemalol gaplashishimiz yoki IELTS bo'yicha mashq qilishimiz mumkin. "
+      "Istalgan mavzuda bemalol gaplashishimiz mumkin. "
       "Quyidagi tugmalardan birini tanlang yoki shunchaki xabar yozing!"
   )
 
@@ -150,7 +124,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data == "tips":
     prompt_text = "IELTS imtihoni uchun eng muhim 3 ta maslahatni aytib ber."
 
-  bot_reply = get_ai_response(user_id, prompt_text)
+  bot_reply = get_gemini_response(user_id, prompt_text)
   await query.message.reply_text(bot_reply)
 
 
@@ -159,7 +133,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   user_text = update.message.text
 
-  bot_reply = get_ai_response(user_id, user_text)
+  bot_reply = get_gemini_response(user_id, user_text)
   await update.message.reply_text(bot_reply)
 
 
