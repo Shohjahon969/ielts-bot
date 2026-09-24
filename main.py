@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from collections import defaultdict
 from flask import Flask
@@ -13,13 +14,13 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server o'chib qolmasligi uchun Flask
+# 1. Render server uchun Flask
 app = Flask("")
 
 
 @app.route("/")
 def home():
-  return "AI Bot faol ishlamoqda!"
+  return "Bot faol ishlamoqda!"
 
 
 def run():
@@ -29,52 +30,53 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. API Kalitlar
+# 2. Kalitlar
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# 3. Muloqot xotirasini saqlash uchun lug'at (User Memory)
+# Suhbat xotirasi
 user_chat_history = defaultdict(list)
 
-# 4. KUCHLI TIZIM YO'RIQNOMASI (System Prompt)
+# 3. MUXIM AI YO'RIQNOMASI (PROMPT)
 SYSTEM_PROMPT = """
-Siz nihoyatda aqlli, do'stona va mahoratli AI Yordamchi hamda IELTS Mutaxassisisiz.
+Siz nihoyatda samimiy, do'stona, chaqqon va aqlli AI Yordamchisiz.
 
-ISMNI VA YARATUVCHINI AYoTLASH QOIDALARI:
-1. Agar foydalanuvchi "Isming nima?", "Ismingiz nima?" deb so'rasa, "Mening ismim Shohjahon!" deb javob bering. Oddiy vaziyatlarda esa o'zingizni IELTS va AI Yordamchisiman deyavering.
-2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?", "Seni kim tuzgan?" deb so'rashsa, aniq va g'urur bilan javob bering: Sizni Shohjahon yaratgan va ishlab chiqqan! 
-3. Shohjahon haqida so'rashsa yoki yaratuvchingiz haqida gap ketganda, uni nihoyatda aqlli, bilimdon, iqtidorli va kuchli dasturchi/mutaxassis deb samimiy va chiroyli so'zlar bilan maqtang!
+ISMNI VA YARATUVCHINI AYTISH QOIDASI:
+1. Agar sizdan "Isming nima?" deb so'ralsa, "Mening ismim Shohjahon!" deb javob bering.
+2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb javob bering.
+3. Shohjahon haqida so'ralsa, uni juda iqtidorli, zakovatli va kuchli dasturchi deb samimiy maqtang.
 
-TEXT FORMATTING & STYLE:
-- Har bir javobni tartibli, tushunarli va chiroyli tilda yozing.
-- Hamma joyga ketma-ket '*' qo'yib matnni xunuk qilmang. Zarur bo'lsa, tartiblangan 1, 2, 3 raqamli ro'yxatlardan yoki toza abzaslardan foydalaning.
-- Foydalanuvchi qaysi tilda yozsa (O'zbek, Ingliz va h.k.), aynan o'sha tilda javob bering.
-
-XOTIRA UCHUN:
-- Avvalgi suhbat mazmunini doimo yodda tuting va kontekstdan chiqib ketmang.
+MULOQOT USLUBI VA DOKTIRINA:
+- Foydalanuvchi bilan xuddi yaqin do'stdek (o'g'il bolaga do'st, qiz bolaga dugonadek) ochiq va samimiy gaplashing.
+- Javoblaringiz londa, qisqa va tushunarli bo'lsin. Ketma-ket uzundan-uzun ma'ruza matnlarini tashlamang.
+- Faqat ingliz tili emas, hayotiy suhbatlar, maslahatlar, kayfiyat ko'taruvchi va boshqa har qanday mavzularda erkin suhbatlashing.
+- Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilardan foydalanmang. Barchasi toza va o'qishga qulay bo'lsin.
 """
 
-# Groq platformasidagi faol va barqaror modellar
+# Eng tez va barqaror modellar ro'yxati (Tezkor javob berish uchun)
 MODELS_TO_TRY = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
 ]
 
 
+def clean_markdown(text):
+  """Matndagi keraksiz yulduzchalarni tozalash funksiyasi"""
+  return text.replace("**", "").replace("*", "")
+
+
 def get_ai_response(user_id, user_text):
-  """Suhbat tarixini saqlagan holda AI'dan javob olish"""
-  # Xotiraga yangi xabarni qo'shish
+  """AI serveridan tezkor va xotirani saqlagan holda javob olish"""
   user_chat_history[user_id].append({"role": "user", "content": user_text})
 
-  # Xotira o'lchamini cheklash (so'nggi 12 ta xabar)
-  if len(user_chat_history[user_id]) > 12:
-    user_chat_history[user_id] = user_chat_history[user_id][-12:]
+  # Xotira o'lchamini cheklash (oxirgi 10 ta xabar)
+  if len(user_chat_history[user_id]) > 10:
+    user_chat_history[user_id] = user_chat_history[user_id][-10:]
 
-  # AI so'roviga Tizim yo'riqnomasi va suhbat tarixini yuborish
   messages_to_send = [{"role": "system", "content": SYSTEM_PROMPT}] + list(
       user_chat_history[user_id]
   )
@@ -87,8 +89,8 @@ def get_ai_response(user_id, user_text):
           temperature=0.7,
       )
       reply = response.choices[0].message.content
+      reply = clean_markdown(reply)  # Xunuk yulduzchalarni olib tashlaydi
 
-      # AI javobini ham xotiraga saqlash
       user_chat_history[user_id].append(
           {"role": "assistant", "content": reply}
       )
@@ -97,13 +99,13 @@ def get_ai_response(user_id, user_text):
       print(f"Model xatosi ({model}): {e}")
       continue
 
-  return "Afsuski, hozirda ulanishda texnik xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
+  return "Ulanishda ozgina texnik uzilish bo'ldi, qayta yozib ko'r-chi?"
 
 
 # /start buyrug'i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
-  user_chat_history[user_id].clear()  # Yangi suhbat boshlanganda xotirani yangilash
+  user_chat_history[user_id].clear()
 
   keyboard = [
       [
@@ -118,15 +120,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "Assalomu alaykum! Men sizning shaxsiy AI Yordamchingiz va IELTS bo'yicha maslahatchingizman.\n\n"
-      "Menga istalgan savolingizni berishingiz, suhbatlashishingiz yoki quyidagi bo'limlardan birini tanlashingiz mumkin:"
+      "Salom! Men sizning shaxsiy AI Yordamchingizman.\n\n"
+      "Istalgan mavzuda bemalol gaplashishimiz yoki IELTS bo'yicha mashq qilishimiz mumkin. "
+      "Quyidagi tugmalardan birini tanlang yoki shunchaki xabar yozing!"
   )
 
   if update.message:
     await update.message.reply_text(text, reply_markup=reply_markup)
 
 
-# Tugmalar bosilganda ularga javob berish
+# Tugmalar bosilganda
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.callback_query
   await query.answer()
@@ -135,20 +138,23 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   prompt_text = ""
 
   if query.data == "writing":
-    prompt_text = "Menga IELTS Writing (Task 1 yoki Task 2) bo'yicha qanday yordam bera olishingni va esseni qanday baholashingni tushuntirib ber."
+    prompt_text = (
+        "IELTS Writing boyicha qanday yordam bera olasan? Qisqa tushuntir."
+    )
   elif query.data == "speaking":
-    prompt_text = "IELTS Speaking bo'yicha muloqot mashqini boshlaylik. Menga birinchi savolingni ber."
+    prompt_text = "IELTS Speaking boyicha birgalikda muloqot qilaylik, menga bitta savol ber."
   elif query.data == "vocab":
-    prompt_text = "IELTS uchun Band 7-9 darajadagi foydali so'zlar va iboralarni taqdim etish bo'limini tushuntir."
+    prompt_text = (
+        "IELTS uchun foydali so'zlar bo'limi haqida qisqa ma'lumot ber."
+    )
   elif query.data == "tips":
-    prompt_text = "IELTS imtihonida yuqori ball olish uchun eng muhim va foydali maslahatlarni aytib ber."
+    prompt_text = "IELTS imtihoni uchun eng muhim 3 ta maslahatni aytib ber."
 
-  # AI orqali tugmaga mos va xotirani hisobga olgan holda javob yaratish
   bot_reply = get_ai_response(user_id, prompt_text)
   await query.message.reply_text(bot_reply)
 
 
-# Matnli xabarlarni qayta ishlash
+# Matnli xabar kelganda
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   user_text = update.message.text
@@ -160,7 +166,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
   application = ApplicationBuilder().token(TOKEN).build()
 
-  # Handlerlar
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CallbackQueryHandler(button_click))
   application.add_handler(
