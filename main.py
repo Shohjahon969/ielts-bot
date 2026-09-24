@@ -2,7 +2,7 @@ import os
 import threading
 from collections import defaultdict
 from flask import Flask
-from openai import OpenAI
+from groq import Groq
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -29,11 +29,11 @@ def run():
 
 threading.Thread(target=run).start()
 
-# API Kalitlar
+# Kalitlar
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
+GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
-client = OpenAI(api_key=OPENAI_KEY)
+client = Groq(api_key=GROQ_KEY)
 
 # Muloqot xotirasi
 user_chat_history = defaultdict(list)
@@ -52,6 +52,12 @@ MULOQOT USLUBI:
 - Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilar ishlatmang. Matn toza bo'lsin.
 """
 
+# Mutlaqo bepul va barqaror ishlaydigan model
+FREE_MODELS = [
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+]
+
 
 def clean_text(text):
   return text.replace("**", "").replace("*", "")
@@ -67,17 +73,24 @@ def get_ai_response(user_id, user_text):
       user_chat_history[user_id]
   )
 
-  try:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini", messages=messages_to_send, temperature=0.7
-    )
-    reply = response.choices[0].message.content
-    reply = clean_text(reply)
+  last_err = ""
+  for model in FREE_MODELS:
+    try:
+      response = client.chat.completions.create(
+          messages=messages_to_send, model=model, temperature=0.7
+      )
+      reply = response.choices[0].message.content
+      reply = clean_text(reply)
 
-    user_chat_history[user_id].append({"role": "assistant", "content": reply})
-    return reply
-  except Exception as e:
-    return f"API Xatosi: {str(e)}"
+      user_chat_history[user_id].append(
+          {"role": "assistant", "content": reply}
+      )
+      return reply
+    except Exception as e:
+      last_err = str(e)
+      continue
+
+  return f"Groq Xatosi: {last_err[:100]}"
 
 
 # /start buyrug'i
