@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Server to'xtab qolmasligi uchun Flask veb-serveri
+# 1. Server o'chmasligi uchun Flask
 app = Flask("")
 
 
@@ -28,18 +28,24 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. API kalitlarni o'qib olish
+# 2. API Kalitlar
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# IELTS AI Instruksiyasi
 SYSTEM_PROMPT = (
     "You are an expert IELTS Tutor AI. Help users with IELTS Speaking, Writing,"
     " Reading, and Listening. Evaluate their text, give Band Scores, correct"
     " grammar, and suggest better vocabulary. Be polite and encouraging."
 )
+
+# Groq'da hozir rasman faol bo'lgan modellar ro'yxati (navbati bilan tekshiriladi)
+MODELS_TO_TRY = [
+    "llama-3.3-70b-specdec",
+    "llama-3.1-8b-instant",
+    "llama3-8b-8192",
+]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -95,19 +101,29 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
+  bot_reply = None
 
-  try:
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text},
-        ],
-        model="mixtral-8x7b-32768",  # Groq'da 100% barqaror ishlaydigan model
-    )
-    bot_reply = response.choices[0].message.content
+  # Modellardan biri javob bermaguncha ketma-ket sinab ko'radi
+  for model_name in MODELS_TO_TRY:
+    try:
+      response = client.chat.completions.create(
+          messages=[
+              {"role": "system", "content": SYSTEM_PROMPT},
+              {"role": "user", "content": user_text},
+          ],
+          model=model_name,
+      )
+      bot_reply = response.choices[0].message.content
+      break
+    except Exception:
+      continue
+
+  if bot_reply:
     await update.message.reply_text(bot_reply)
-  except Exception as e:
-    await update.message.reply_text(f"⚠️ Xatolik yuz berdi:\n\n{e}")
+  else:
+    await update.message.reply_text(
+        "⚠️ AI serveri hozir band. Birozdan so'ng qayta urinib ko'ring."
+    )
 
 
 if __name__ == "__main__":
