@@ -96,21 +96,18 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
 
-  # AI'ga xabar yuborish
   try:
     response = client.chat.completions.create(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
         ],
-        model="llama-3.3-70b-versatile",
+        model="llama3-70b-8192",  # To'g'ri model nomi kiritildi
     )
     bot_reply = response.choices[0].message.content
     await update.message.reply_text(bot_reply)
   except Exception as e:
-    await update.message.reply_text(
-        f"⚠️ Xatolik yuz berdi:\n\n{e}\n\nIltimos, API kalitingiz va so'rovingizni tekshiring."
-    )
+    await update.message.reply_text(f"⚠️ Xatolik yuz berdi:\n\n{e}")
 
 
 if __name__ == "__main__":
