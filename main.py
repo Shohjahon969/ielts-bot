@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render o'chib qolmasligi uchun Flask veb-serveri
+# 1. Server to'xtab qolmasligi uchun Flask veb-serveri
 app = Flask("")
 
 
@@ -28,7 +28,7 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Kalitlarni o'qib olish
+# 2. API kalitlarni o'qib olish
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
@@ -56,7 +56,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "👋 **Salom! Men sizning shaxsiy IELTS AI Tutoringizaman.**\n\n"
+      "👋 **Salom! Men sizning shaxsiy IELTS AI Yordamchingizman.**\n\n"
       "Quyidagi bo'limlardan birini tanlang yoki istalgan IELTS'ga oid"
       " savolingizni/esseingizni to'g'ridan-to'g'ri yuboring!"
   )
@@ -102,7 +102,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
         ],
-        model="llama3-70b-8192",  # To'g'ri model nomi kiritildi
+        model="llama-3.1-8b-instant",  # Groq'da hozir aniq ishlaydigan model
     )
     bot_reply = response.choices[0].message.content
     await update.message.reply_text(bot_reply)
