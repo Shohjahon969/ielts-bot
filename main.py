@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Server o'chmasligi uchun Flask veb-serveri
+# 1. Flask veb-serveri
 app = Flask("")
 
 
@@ -44,12 +44,6 @@ RULES:
 4. If the user asks for IELTS practice, writing evaluation, grammar corrections, or speaking help, give expert IELTS guidance.
 """
 
-# Hozirda Groq'da faol bo'lgan modellar
-MODELS_TO_TRY = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-]
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   keyboard = [
@@ -66,7 +60,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   text = (
       "👋 **Salom! Men sizning AI Yordamchingizman.**\n\n"
-      "Istalgan mavzuda bemalol suhbatlashishimiz yoki IELTS bo'yicha mashq qilishimiz mumkin. "
+      "Istalgan mavzuda bemalol suhbatlashishimiz yoki IELTS bo'yicha mashq qilishingiz mumkin. "
       "Quyidagi tugmalardan birini tanlang yoki menga shunchaki xabar yozing!"
   )
 
@@ -100,28 +94,19 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
-  bot_reply = None
 
-  for model_name in MODELS_TO_TRY:
-    try:
-      response = client.chat.completions.create(
-          messages=[
-              {"role": "system", "content": SYSTEM_PROMPT},
-              {"role": "user", "content": user_text},
-          ],
-          model=model_name,
-      )
-      bot_reply = response.choices[0].message.content
-      break
-    except Exception:
-      continue
-
-  if bot_reply:
-    await update.message.reply_text(bot_reply)
-  else:
-    await update.message.reply_text(
-        "⚠️ Xatolik yuz berdi. Iltimos, bir ozdan so'ng qayta urinib ko'ring."
+  try:
+    response = client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ],
+        model="llama-3.3-70b-versatile",
     )
+    bot_reply = response.choices[0].message.content
+    await update.message.reply_text(bot_reply)
+  except Exception as e:
+    await update.message.reply_text(f"⚠️ Xatolik aniqlandi:\n\n{e}")
 
 
 if __name__ == "__main__":
