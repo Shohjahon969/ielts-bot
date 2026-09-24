@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Server o'chmasligi uchun Flask
+# 1. Server o'chmasligi uchun Flask veb-serveri
 app = Flask("")
 
 
@@ -34,16 +34,20 @@ GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-SYSTEM_PROMPT = (
-    "You are an expert IELTS Tutor AI. Help users with IELTS Speaking, Writing,"
-    " Reading, and Listening. Evaluate their text, give Band Scores, correct"
-    " grammar, and suggest better vocabulary. Be polite and encouraging."
-)
+# Moslashuvchan va do'stona System Prompt
+SYSTEM_PROMPT = """
+You are a friendly, intelligent AI assistant and IELTS Tutor.
+RULES:
+1. ALWAYS respond in the EXACT same language as the user's message. If the user writes in Uzbek, reply in natural Uzbek. If in English, reply in English.
+2. Be conversational, natural, and friendly. Do NOT force or push the user into IELTS topics if they are just chatting or asking general questions.
+3. If the user asks about general topics, answer naturally like a helpful friend.
+4. If the user asks for IELTS practice, writing evaluation, grammar corrections, or speaking help, give expert IELTS guidance.
+"""
 
-# Groq'da hozir rasman faol bo'lgan modellar
+# Hozirda Groq'da faol bo'lgan modellar
 MODELS_TO_TRY = [
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
 ]
 
 
@@ -61,9 +65,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "👋 **Salom! Men sizning shaxsiy IELTS AI Yordamchingizman.**\n\n"
-      "Quyidagi bo'limlardan birini tanlang yoki istalgan IELTS'ga oid"
-      " savolingizni/esseingizni to'g'ridan-to'g'ri yuboring!"
+      "👋 **Salom! Men sizning AI Yordamchingizman.**\n\n"
+      "Istalgan mavzuda bemalol suhbatlashishimiz yoki IELTS bo'yicha mashq qilishimiz mumkin. "
+      "Quyidagi tugmalardan birini tanlang yoki menga shunchaki xabar yozing!"
   )
 
   if update.message:
@@ -78,23 +82,19 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   if query.data == "writing":
     await query.message.reply_text(
-        "✍️ **IELTS Writing:** Esseingizni yoki xatingizni shu yerga yuboring."
-        " Men uni tekshirib, Band Score beraman va xatolaringizni to'g'rilayman!"
+        "✍️ **IELTS Writing:** Esseingizni yuboring, uni tekshirib beraman!"
     )
   elif query.data == "speaking":
     await query.message.reply_text(
-        "🗣 **IELTS Speaking:** Menga istalgan mavzuda matn yuboring yoki savol"
-        " so'rang, birga muloqot qilamiz va nutqingizni yaxshilaymiz!"
+        "🗣 **IELTS Speaking:** Istalgan mavzuda inglizcha gaplashamiz!"
     )
   elif query.data == "vocab":
     await query.message.reply_text(
-        "📚 **Vocabulary:** Qaysi mavzuda (masalan: Environment, Education,"
-        " Technology) Band 7-9 so'zlar kerak? Mavzuni yozing!"
+        "📚 **Vocabulary:** Qaysi mavzuda yangi so'zlar kerak?"
     )
   elif query.data == "tips":
     await query.message.reply_text(
-        "💡 **IELTS Tips:** Qaysi bo me'yoriy maslahat kerak? (Writing,"
-        " Speaking, Reading, Listening) Yozib qoldiring!"
+        "💡 **IELTS Tips:** Qaysi bo'lim bo'yicha maslahat kerak?"
     )
 
 
@@ -120,7 +120,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(bot_reply)
   else:
     await update.message.reply_text(
-        "⚠️ AI serveri hozir band. Birozdan so'ng qayta urinib ko'ring."
+        "⚠️ Xatolik yuz berdi. Iltimos, bir ozdan so'ng qayta urinib ko'ring."
     )
 
 
