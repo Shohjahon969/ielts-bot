@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 from collections import defaultdict
 from flask import Flask
@@ -14,13 +13,13 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server uchun Flask
+# 1. Render server o'chmasligi uchun Flask veb-serveri
 app = Flask("")
 
 
 @app.route("/")
 def home():
-  return "Bot faol ishlamoqda!"
+  return "AI Bot faol ishlamoqda!"
 
 
 def run():
@@ -36,44 +35,44 @@ GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# Suhbat xotirasi
+# Muloqot xotirasi (User Memory)
 user_chat_history = defaultdict(list)
 
-# 3. MUXIM AI YO'RIQNOMASI (PROMPT)
+# 3. KUCHLI AI PROMPT (Shohjahon, samimiy do'stona muloqot va toza dizayn)
 SYSTEM_PROMPT = """
 Siz nihoyatda samimiy, do'stona, chaqqon va aqlli AI Yordamchisiz.
 
-ISMNI VA YARATUVCHINI AYTISH QOIDASI:
+ISMNI VA YARATUVCHINI AYTISH QOIDALARI:
 1. Agar sizdan "Isming nima?" deb so'ralsa, "Mening ismim Shohjahon!" deb javob bering.
-2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb javob bering.
-3. Shohjahon haqida so'ralsa, uni juda iqtidorli, zakovatli va kuchli dasturchi deb samimiy maqtang.
+2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb g'urur bilan javob bering.
+3. Shohjahon haqida so'rashsa, uni juda iqtidorli, zakovatli va o'z ishining ustasi bo'lgan dasturchi deb samimiy maqtang.
 
-MULOQOT USLUBI VA DOKTIRINA:
+MULOQOT USLUBI VA SHAKLI:
 - Foydalanuvchi bilan xuddi yaqin do'stdek (o'g'il bolaga do'st, qiz bolaga dugonadek) ochiq va samimiy gaplashing.
 - Javoblaringiz londa, qisqa va tushunarli bo'lsin. Ketma-ket uzundan-uzun ma'ruza matnlarini tashlamang.
-- Faqat ingliz tili emas, hayotiy suhbatlar, maslahatlar, kayfiyat ko'taruvchi va boshqa har qanday mavzularda erkin suhbatlashing.
-- Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilardan foydalanmang. Barchasi toza va o'qishga qulay bo'lsin.
+- Matnlarda keraksiz yulduzcha (*) yoki xunuk markdown belgilardan foydalanmang!
+- Faqat ingliz tili emas, har qanday mavzuda erkin va samimiy suhbatlashing.
 """
 
-# Eng tez va barqaror modellar ro'yxati (Tezkor javob berish uchun)
+# Groq platformasida eng ishonchli va doimiy faol modellar ro'yxati
 MODELS_TO_TRY = [
-    "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
+    "llama-3.3-70b-versatile",
+    "mixtral-8x7b-32768",
 ]
 
 
-def clean_markdown(text):
-  """Matndagi keraksiz yulduzchalarni tozalash funksiyasi"""
+def clean_text(text):
+  """Matndagi xunuk yulduzchalarni olib tashlash"""
   return text.replace("**", "").replace("*", "")
 
 
 def get_ai_response(user_id, user_text):
-  """AI serveridan tezkor va xotirani saqlagan holda javob olish"""
+  """Groq AI orqali suhbat xotirasini saqlab javob olish"""
+  # Xotiraga yangi xabarni qo'shish
   user_chat_history[user_id].append({"role": "user", "content": user_text})
 
-  # Xotira o'lchamini cheklash (oxirgi 10 ta xabar)
+  # Xotira hajmini cheklash (oxirgi 10 ta xabar)
   if len(user_chat_history[user_id]) > 10:
     user_chat_history[user_id] = user_chat_history[user_id][-10:]
 
@@ -89,8 +88,9 @@ def get_ai_response(user_id, user_text):
           temperature=0.7,
       )
       reply = response.choices[0].message.content
-      reply = clean_markdown(reply)  # Xunuk yulduzchalarni olib tashlaydi
+      reply = clean_text(reply)
 
+      # AI javobini xotiraga saqlash
       user_chat_history[user_id].append(
           {"role": "assistant", "content": reply}
       )
@@ -99,7 +99,7 @@ def get_ai_response(user_id, user_text):
       print(f"Model xatosi ({model}): {e}")
       continue
 
-  return "Ulanishda ozgina texnik uzilish bo'ldi, qayta yozib ko'r-chi?"
+  return "Suhbatda ozgina uzilish bo'ldi, do'stim. Qayta yozib ko'r-chi?"
 
 
 # /start buyrug'i
