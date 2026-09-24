@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Server o'chmasligi uchun Flask
+# 1. Render serverini uxlab qolmasligi uchun Flask
 app = Flask("")
 
 
@@ -39,13 +39,6 @@ SYSTEM_PROMPT = (
     " Reading, and Listening. Evaluate their text, give Band Scores, correct"
     " grammar, and suggest better vocabulary. Be polite and encouraging."
 )
-
-# Groq'da hozir rasman faol bo'lgan modellar ro'yxati (navbati bilan tekshiriladi)
-MODELS_TO_TRY = [
-    "llama-3.3-70b-specdec",
-    "llama-3.1-8b-instant",
-    "llama3-8b-8192",
-]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -101,28 +94,20 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
-  bot_reply = None
 
-  # Modellardan biri javob bermaguncha ketma-ket sinab ko'radi
-  for model_name in MODELS_TO_TRY:
-    try:
-      response = client.chat.completions.create(
-          messages=[
-              {"role": "system", "content": SYSTEM_PROMPT},
-              {"role": "user", "content": user_text},
-          ],
-          model=model_name,
-      )
-      bot_reply = response.choices[0].message.content
-      break
-    except Exception:
-      continue
-
-  if bot_reply:
+  try:
+    response = client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ],
+        model="llama-3.3-70b-versatile",  # Hozirda Groq'dagi yagona va asosiy faol model
+    )
+    bot_reply = response.choices[0].message.content
     await update.message.reply_text(bot_reply)
-  else:
+  except Exception as e:
     await update.message.reply_text(
-        "⚠️ AI serveri hozir band. Birozdan so'ng qayta urinib ko'ring."
+        f"⚠️ Xatolik yuz berdi:\n\n{e}\n\nIltimos, Render'dagi GROQ_API_KEY to'g'riligini tekshiring."
     )
 
 
