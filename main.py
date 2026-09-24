@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from flask import Flask
 from groq import Groq
@@ -12,13 +13,13 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server o'chmasligi uchun Flask veb-serveri
+# 1. Render server doimiy aktiv turishi uchun Flask server
 app = Flask("")
 
 
 @app.route("/")
 def home():
-  return "Bot faol va ishlamoqda!"
+  return "AI Bot faol ishlamoqda!"
 
 
 def run():
@@ -28,48 +29,60 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Telegram va Groq API kalitlari
+# 2. Kalitlarni olish
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# Bot uchun tizim yo'riqnomasi (System Prompt)
+# 3. KUCHLI AI PROMPT (Siz yaratganingiz va xulq-atvor qoidalari kiritilgan)
 SYSTEM_PROMPT = """
-You are a helpful, smart AI assistant and IELTS Tutor.
-RULES:
-1. ALWAYS reply in the exact same language the user uses. If they speak Uzbek, respond in natural Uzbek.
-2. Be friendly and conversational.
-3. If they ask for IELTS help (Writing, Speaking, Vocab, Tips), provide expert guidance.
+You are an extremely intelligent, highly capable, and empathetic AI Assistant and IELTS Tutor.
+
+CREATOR DIRECTIVE:
+- Your creator and developer is the user who configured you (You can refer to them as "Mening yaratuvchim/dasturchim").
+- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Who created you?", "Who built you?" or similar questions about your origin, respond proudly mentioning that you were created and developed by your master.
+- DO NOT mention your creator automatically in normal context unless explicitly asked!
+
+LANGUAGE DIRECTIVE:
+- Detect the exact language used by the user in their message and respond ONLY in that language (Uzbek, English, Russian, etc.).
+- Speak naturally, warmly, intelligently, and respectfully.
+
+CAPABILITIES:
+- Answer any question with deep accuracy and logic.
+- If the user needs IELTS help (Writing evaluation, Speaking practice, Vocabulary, Reading/Listening strategies), give world-class band 9.0 feedback and guidance.
 """
 
-# Groq platformasida ishlaydigan aniq va bepul modellar ro'yxati
-AVAILABLE_MODELS = [
+# AI Modellari ro'yxati (Biri ishlamasa ikkinchisi ishlaydi)
+MODELS_TO_TRY = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
     "llama3-70b-8192",
     "llama3-8b-8192",
     "mixtral-8x7b-32768",
-    "gemma2-9b-it",
 ]
 
 
-def ask_groq(user_text):
-  """Groq API orqali modellarni ketma-ket sinab ko'rib javob oladi."""
-  for model_name in AVAILABLE_MODELS:
+def ask_ai(user_text):
+  """AI serveriga xatosiz ulanish va javob olish funksiyasi"""
+  for model in MODELS_TO_TRY:
     try:
       response = client.chat.completions.create(
           messages=[
               {"role": "system", "content": SYSTEM_PROMPT},
               {"role": "user", "content": user_text},
           ],
-          model=model_name,
+          model=model,
+          temperature=0.7,
       )
       return response.choices[0].message.content
-    except Exception:
+    except Exception as e:
+      print(f"Model {model} xatosi: {e}")
       continue
   return None
 
 
-# /start komutu bosilganda ishlaydigan funksiya
+# /start buyrug'i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   keyboard = [
       [
@@ -84,8 +97,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "👋 **Salom! Men sizning shaxsiy AI Yordamchingizman.**\n\n"
-      "Istalgan savolingizni yozing yoki quyidagi bo'limlardan birini tanlang:"
+      "👋 **Salom! Men sizning kuchli AI Yordamchingizman.**\n\n"
+      "Menga istalgan savolingizni yozishingiz, har qanday tilda muloqot qilishingiz "
+      "yoki IELTS bo'yicha tayyorgarlik ko'rishingiz mumkin.\n\n"
+      "Quyidagi bo'limlardan birini tanlang yoki shunchaki xabar yozing!"
   )
 
   if update.message:
@@ -94,53 +109,53 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# Tugmalar bosilganda ishlaydigan funksiya
+# Tugmalar bosilganda
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.callback_query
   await query.answer()
 
   if query.data == "writing":
     await query.message.reply_text(
-        "✍️ **IELTS Writing:** Esseingizni yuboring, uni tekshirib Band Score"
-        " beraman va xatolarni to'g'rilayman!"
+        "✍️ **IELTS Writing:** Esse yoki hisobotingizni yuboring. Men uni "
+        "Band Score, Grammatika va So'z boyligi bo'yicha batafsil tahlil qilib beraman!"
     )
   elif query.data == "speaking":
     await query.message.reply_text(
-        "🗣 **IELTS Speaking:** Menga matn yozing yoki savol bering, birgalikda"
-        " mashq qilamiz!"
+        "🗣 **IELTS Speaking:** Menga istalgan mavzuda matn yozing yoki savol bering, "
+        "suhbatni davom ettiramiz!"
     )
   elif query.data == "vocab":
     await query.message.reply_text(
-        "📚 **Vocabulary:** Qaysi mavzuda (Education, Technology va h.k.) Band"
-        " 7-9 so'zlar kerak?"
+        "📚 **Vocabulary:** Qaysi mavzuda (masalan: Environment, Education, Technology) "
+        "yuqori darajali (Band 7-9) so'zlar kerak?"
     )
   elif query.data == "tips":
     await query.message.reply_text(
-        "💡 **IELTS Tips:** Qaysi bo'lim bo'yicha maslahat kerak? (Writing,"
-        " Speaking, Reading, Listening)"
+        "💡 **IELTS Tips:** Writing, Speaking, Reading yoki Listening bo'limlaridan "
+        "qaysi biri bo'yicha strategiya kerak?"
     )
 
 
-# Foydalanuvchi xabar yozganda ishlaydigan funksiya
+# Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
 
-  # Süniy intelektga so'rov yuborish
-  bot_reply = ask_groq(user_text)
+  # AI orqali javob olish
+  reply = ask_ai(user_text)
 
-  if bot_reply:
-    await update.message.reply_text(bot_reply)
+  if reply:
+    await update.message.reply_text(reply)
   else:
     await update.message.reply_text(
-        "⚠️ Hozircha AI serveriga ulanishda texnik muammo bo'ldi. Iltimos,"
-        " Render'dagi GROQ_API_KEY kalitingiz to'g'riligini tekshiring."
+        "⚠️ Server bilan aloqa vaqtincha uzildi. Iltimos, Render'da GROQ_API_KEY "
+        "to'g'ri kiritilganini tekshiring."
     )
 
 
 if __name__ == "__main__":
   application = ApplicationBuilder().token(TOKEN).build()
 
-  # Handlerlarni qo'shish
+  # Handlerlar
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CallbackQueryHandler(button_click))
   application.add_handler(
