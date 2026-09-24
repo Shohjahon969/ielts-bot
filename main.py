@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render serverini uxlab qolmasligi uchun Flask
+# 1. Server o'chmasligi uchun Flask
 app = Flask("")
 
 
@@ -39,6 +39,12 @@ SYSTEM_PROMPT = (
     " Reading, and Listening. Evaluate their text, give Band Scores, correct"
     " grammar, and suggest better vocabulary. Be polite and encouraging."
 )
+
+# Groq'da hozir rasman faol bo'lgan modellar
+MODELS_TO_TRY = [
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,27 +93,34 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
   elif query.data == "tips":
     await query.message.reply_text(
-        "💡 **IELTS Tips:** Qaysi bo'lim bo'yicha maslahat kerak? (Writing,"
+        "💡 **IELTS Tips:** Qaysi bo me'yoriy maslahat kerak? (Writing,"
         " Speaking, Reading, Listening) Yozib qoldiring!"
     )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
+  bot_reply = None
 
-  try:
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text},
-        ],
-        model="llama-3.3-70b-versatile",  # Hozirda Groq'dagi yagona va asosiy faol model
-    )
-    bot_reply = response.choices[0].message.content
+  for model_name in MODELS_TO_TRY:
+    try:
+      response = client.chat.completions.create(
+          messages=[
+              {"role": "system", "content": SYSTEM_PROMPT},
+              {"role": "user", "content": user_text},
+          ],
+          model=model_name,
+      )
+      bot_reply = response.choices[0].message.content
+      break
+    except Exception:
+      continue
+
+  if bot_reply:
     await update.message.reply_text(bot_reply)
-  except Exception as e:
+  else:
     await update.message.reply_text(
-        f"⚠️ Xatolik yuz berdi:\n\n{e}\n\nIltimos, Render'dagi GROQ_API_KEY to'g'riligini tekshiring."
+        "⚠️ AI serveri hozir band. Birozdan so'ng qayta urinib ko'ring."
     )
 
 
