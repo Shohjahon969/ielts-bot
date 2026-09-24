@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 from flask import Flask
 from groq import Groq
@@ -13,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server doimiy aktiv turishi uchun Flask server
+# 1. Render server doimiy faol turishi uchun Flask veb-serveri
 app = Flask("")
 
 
@@ -29,31 +28,31 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Kalitlarni olish
+# 2. Telegram va Groq API kalitlarini olish
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# 3. KUCHLI AI PROMPT (Siz yaratganingiz va xulq-atvor qoidalari kiritilgan)
+# 3. KUCHLI AI PROMPT (Aqlli assistant va IELTS Tutor)
 SYSTEM_PROMPT = """
-You are an extremely intelligent, highly capable, and empathetic AI Assistant and IELTS Tutor.
+You are an extremely intelligent, empathetic, and highly capable AI Assistant and IELTS Expert.
 
-CREATOR DIRECTIVE:
-- Your creator and developer is the user who configured you (You can refer to them as "Mening yaratuvchim/dasturchim").
-- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Who created you?", "Who built you?" or similar questions about your origin, respond proudly mentioning that you were created and developed by your master.
-- DO NOT mention your creator automatically in normal context unless explicitly asked!
+CREATOR & ORIGIN DIRECTIVE:
+- Your true creator and developer is the user who configured and deployed you.
+- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Dasturching kim?", "Who created you?", or similar questions about your creator, proudly state that you were created and developed by your master.
+- DO NOT mention your creator automatically in standard conversations unless explicitly asked.
 
 LANGUAGE DIRECTIVE:
-- Detect the exact language used by the user in their message and respond ONLY in that language (Uzbek, English, Russian, etc.).
-- Speak naturally, warmly, intelligently, and respectfully.
+- Automatically detect the user's language and respond ONLY in that exact language (Uzbek, English, Russian, etc.).
+- Maintain a warm, natural, friendly, and expert conversational tone.
 
 CAPABILITIES:
-- Answer any question with deep accuracy and logic.
-- If the user needs IELTS help (Writing evaluation, Speaking practice, Vocabulary, Reading/Listening strategies), give world-class band 9.0 feedback and guidance.
+- Answer general questions with high logic, accuracy, and clear detail.
+- Provide top-tier (Band 9.0 level) assistance for IELTS Writing evaluation, Speaking practice, Vocabulary, and test-taking strategies when requested.
 """
 
-# AI Modellari ro'yxati (Biri ishlamasa ikkinchisi ishlaydi)
+# Groq platformasidagi eng kuchli va barqaror modellar ro'yxati
 MODELS_TO_TRY = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
@@ -64,7 +63,7 @@ MODELS_TO_TRY = [
 
 
 def ask_ai(user_text):
-  """AI serveriga xatosiz ulanish va javob olish funksiyasi"""
+  """AI modellarni navbatma-navbat sinab ko'rib javob oladi."""
   for model in MODELS_TO_TRY:
     try:
       response = client.chat.completions.create(
@@ -77,7 +76,7 @@ def ask_ai(user_text):
       )
       return response.choices[0].message.content
     except Exception as e:
-      print(f"Model {model} xatosi: {e}")
+      print(f"Model {model} xatoligi: {e}")
       continue
   return None
 
@@ -97,10 +96,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "👋 **Salom! Men sizning kuchli AI Yordamchingizman.**\n\n"
-      "Menga istalgan savolingizni yozishingiz, har qanday tilda muloqot qilishingiz "
-      "yoki IELTS bo'yicha tayyorgarlik ko'rishingiz mumkin.\n\n"
-      "Quyidagi bo'limlardan birini tanlang yoki shunchaki xabar yozing!"
+      "👋 **Salom! Men sizning shaxsiy AI Yordamchingizman.**\n\n"
+      "Istalgan savolingizni berishingiz, har qanday tilda suhbatlashishingiz "
+      "yoki IELTS bo'yicha mashq qilishingiz mumkin.\n\n"
+      "Quyidagi tugmalardan birini tanlang yoki shunchaki xabar yozing!"
   )
 
   if update.message:
@@ -109,34 +108,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# Tugmalar bosilganda
+# Tugmalar bosilganda ishlaydigan mantiq
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.callback_query
   await query.answer()
 
   if query.data == "writing":
     await query.message.reply_text(
-        "✍️ **IELTS Writing:** Esse yoki hisobotingizni yuboring. Men uni "
-        "Band Score, Grammatika va So'z boyligi bo'yicha batafsil tahlil qilib beraman!"
+        "✍️ **IELTS Writing:** Esseingizni yuboring. Men uni Band Score va "
+        "grammatik xatolar bo'yicha chuqur tahlil qilib beraman!"
     )
   elif query.data == "speaking":
     await query.message.reply_text(
-        "🗣 **IELTS Speaking:** Menga istalgan mavzuda matn yozing yoki savol bering, "
-        "suhbatni davom ettiramiz!"
+        "🗣 **IELTS Speaking:** Menga matn yozing yoki savol bering, birgalikda mashq qilamiz!"
     )
   elif query.data == "vocab":
     await query.message.reply_text(
-        "📚 **Vocabulary:** Qaysi mavzuda (masalan: Environment, Education, Technology) "
-        "yuqori darajali (Band 7-9) so'zlar kerak?"
+        "📚 **Vocabulary:** Qaysi mavzuda (Education, Technology va h.k.) Band 7-9 so'zlar kerak?"
     )
   elif query.data == "tips":
     await query.message.reply_text(
-        "💡 **IELTS Tips:** Writing, Speaking, Reading yoki Listening bo'limlaridan "
-        "qaysi biri bo'yicha strategiya kerak?"
+        "💡 **IELTS Tips:** Qaysi bo'lim (Writing, Speaking, Reading, Listening) bo'yicha maslahat kerak?"
     )
 
 
-# Xabarlarni qayta ishlash
+# Foydalanuvchi xabarlarini qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
 
@@ -147,15 +143,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
   else:
     await update.message.reply_text(
-        "⚠️ Server bilan aloqa vaqtincha uzildi. Iltimos, Render'da GROQ_API_KEY "
-        "to'g'ri kiritilganini tekshiring."
+        "⚠️ Texnik uzilish yuz berdi. Iltimos, bir ozdan so'ng qayta urinib ko'ring."
     )
 
 
 if __name__ == "__main__":
   application = ApplicationBuilder().token(TOKEN).build()
 
-  # Handlerlar
+  # Handlerlarni ro'yxatdan o'tkazish
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CallbackQueryHandler(button_click))
   application.add_handler(
