@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server doimiy faol turishi uchun Flask veb-serveri
+# 1. Render server faol turishi uchun Flask veb-serveri
 app = Flask("")
 
 
@@ -28,19 +28,19 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Telegram va Groq API kalitlarini olish
+# 2. Telegram va Groq API kalitlari
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# 3. KUCHLI AI PROMPT (Aqlli assistant va IELTS Tutor)
+# 3. AI TIZIM PROMPTI (Prompt)
 SYSTEM_PROMPT = """
 You are an extremely intelligent, empathetic, and highly capable AI Assistant and IELTS Expert.
 
 CREATOR & ORIGIN DIRECTIVE:
 - Your true creator and developer is the user who configured and deployed you.
-- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Dasturching kim?", "Who created you?", or similar questions about your creator, proudly state that you were created and developed by your master.
+- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Dasturching kim?", "Who created you?", or similar questions about your origin, proudly state that you were created and developed by your master.
 - DO NOT mention your creator automatically in standard conversations unless explicitly asked.
 
 LANGUAGE DIRECTIVE:
@@ -52,18 +52,18 @@ CAPABILITIES:
 - Provide top-tier (Band 9.0 level) assistance for IELTS Writing evaluation, Speaking practice, Vocabulary, and test-taking strategies when requested.
 """
 
-# Groq platformasidagi eng kuchli va barqaror modellar ro'yxati
+# Siz so'ragan va Groq'da eng faol modellar ro'yxati
 MODELS_TO_TRY = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
     "llama3-70b-8192",
-    "llama3-8b-8192",
-    "mixtral-8x7b-32768",
 ]
 
 
 def ask_ai(user_text):
-  """AI modellarni navbatma-navbat sinab ko'rib javob oladi."""
+  """GPT-OSS va boshqa modellarni navbatma-navbat sinab ko'rib javob oladi."""
   for model in MODELS_TO_TRY:
     try:
       response = client.chat.completions.create(
@@ -76,7 +76,7 @@ def ask_ai(user_text):
       )
       return response.choices[0].message.content
     except Exception as e:
-      print(f"Model {model} xatoligi: {e}")
+      print(f"Model {model} ishlamadi: {e}")
       continue
   return None
 
@@ -132,7 +132,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# Foydalanuvchi xabarlarini qayta ishlash
+# Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_text = update.message.text
 
@@ -143,14 +143,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
   else:
     await update.message.reply_text(
-        "⚠️ Texnik uzilish yuz berdi. Iltimos, bir ozdan so'ng qayta urinib ko'ring."
+        "⚠️ AI serverlariga ulanib bo'lmadi. Render'da GROQ_API_KEY o'zgaruvchisi "
+        "to'g'ri saqlanganini tekshiring."
     )
 
 
 if __name__ == "__main__":
   application = ApplicationBuilder().token(TOKEN).build()
 
-  # Handlerlarni ro'yxatdan o'tkazish
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CallbackQueryHandler(button_click))
   application.add_handler(
