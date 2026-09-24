@@ -1,5 +1,6 @@
 import os
 import threading
+from collections import defaultdict
 from flask import Flask
 from groq import Groq
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -12,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Render server faol turishi uchun Flask veb-serveri
+# 1. Render server o'chib qolmasligi uchun Flask
 app = Flask("")
 
 
@@ -28,61 +29,82 @@ def run():
 
 threading.Thread(target=run).start()
 
-# 2. Telegram va Groq API kalitlari
+# 2. API Kalitlar
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 
 client = Groq(api_key=GROQ_KEY)
 
-# 3. AI TIZIM PROMPTI (Prompt)
+# 3. Muloqot xotirasini saqlash uchun lug'at (User Memory)
+user_chat_history = defaultdict(list)
+
+# 4. KUCHLI TIZIM YO'RIQNOMASI (System Prompt)
 SYSTEM_PROMPT = """
-You are an extremely intelligent, empathetic, and highly capable AI Assistant and IELTS Expert.
+Siz nihoyatda aqlli, do'stona va mahoratli AI Yordamchi hamda IELTS Mutaxassisisiz.
 
-CREATOR & ORIGIN DIRECTIVE:
-- Your true creator and developer is the user who configured and deployed you.
-- ONLY if the user specifically asks "Seni kim yaratgan?", "Seni kim tuzgan?", "Dasturching kim?", "Who created you?", or similar questions about your origin, proudly state that you were created and developed by your master.
-- DO NOT mention your creator automatically in standard conversations unless explicitly asked.
+ISMNI VA YARATUVCHINI AYoTLASH QOIDALARI:
+1. Agar foydalanuvchi "Isming nima?", "Ismingiz nima?" deb so'rasa, "Mening ismim Shohjahon!" deb javob bering. Oddiy vaziyatlarda esa o'zingizni IELTS va AI Yordamchisiman deyavering.
+2. Agar sizdan "Seni kim yaratgan?", "Dasturching kim?", "Seni kim tuzgan?" deb so'rashsa, aniq va g'urur bilan javob bering: Sizni Shohjahon yaratgan va ishlab chiqqan! 
+3. Shohjahon haqida so'rashsa yoki yaratuvchingiz haqida gap ketganda, uni nihoyatda aqlli, bilimdon, iqtidorli va kuchli dasturchi/mutaxassis deb samimiy va chiroyli so'zlar bilan maqtang!
 
-LANGUAGE DIRECTIVE:
-- Automatically detect the user's language and respond ONLY in that exact language (Uzbek, English, Russian, etc.).
-- Maintain a warm, natural, friendly, and expert conversational tone.
+TEXT FORMATTING & STYLE:
+- Har bir javobni tartibli, tushunarli va chiroyli tilda yozing.
+- Hamma joyga ketma-ket '*' qo'yib matnni xunuk qilmang. Zarur bo'lsa, tartiblangan 1, 2, 3 raqamli ro'yxatlardan yoki toza abzaslardan foydalaning.
+- Foydalanuvchi qaysi tilda yozsa (O'zbek, Ingliz va h.k.), aynan o'sha tilda javob bering.
 
-CAPABILITIES:
-- Answer general questions with high logic, accuracy, and clear detail.
-- Provide top-tier (Band 9.0 level) assistance for IELTS Writing evaluation, Speaking practice, Vocabulary, and test-taking strategies when requested.
+XOTIRA UCHUN:
+- Avvalgi suhbat mazmunini doimo yodda tuting va kontekstdan chiqib ketmang.
 """
 
-# Siz so'ragan va Groq'da eng faol modellar ro'yxati
+# Groq platformasidagi faol va barqaror modellar
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "llama3-70b-8192",
 ]
 
 
-def ask_ai(user_text):
-  """GPT-OSS va boshqa modellarni navbatma-navbat sinab ko'rib javob oladi."""
+def get_ai_response(user_id, user_text):
+  """Suhbat tarixini saqlagan holda AI'dan javob olish"""
+  # Xotiraga yangi xabarni qo'shish
+  user_chat_history[user_id].append({"role": "user", "content": user_text})
+
+  # Xotira o'lchamini cheklash (so'nggi 12 ta xabar)
+  if len(user_chat_history[user_id]) > 12:
+    user_chat_history[user_id] = user_chat_history[user_id][-12:]
+
+  # AI so'roviga Tizim yo'riqnomasi va suhbat tarixini yuborish
+  messages_to_send = [{"role": "system", "content": SYSTEM_PROMPT}] + list(
+      user_chat_history[user_id]
+  )
+
   for model in MODELS_TO_TRY:
     try:
       response = client.chat.completions.create(
-          messages=[
-              {"role": "system", "content": SYSTEM_PROMPT},
-              {"role": "user", "content": user_text},
-          ],
+          messages=messages_to_send,
           model=model,
           temperature=0.7,
       )
-      return response.choices[0].message.content
+      reply = response.choices[0].message.content
+
+      # AI javobini ham xotiraga saqlash
+      user_chat_history[user_id].append(
+          {"role": "assistant", "content": reply}
+      )
+      return reply
     except Exception as e:
-      print(f"Model {model} ishlamadi: {e}")
+      print(f"Model xatosi ({model}): {e}")
       continue
-  return None
+
+  return "Afsuski, hozirda ulanishda texnik xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
 
 
 # /start buyrug'i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user_id = update.effective_user.id
+  user_chat_history[user_id].clear()  # Yangi suhbat boshlanganda xotirani yangilash
+
   keyboard = [
       [
           InlineKeyboardButton("📝 Writing Check", callback_data="writing"),
@@ -96,61 +118,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   reply_markup = InlineKeyboardMarkup(keyboard)
 
   text = (
-      "👋 **Salom! Men sizning shaxsiy AI Yordamchingizman.**\n\n"
-      "Istalgan savolingizni berishingiz, har qanday tilda suhbatlashishingiz "
-      "yoki IELTS bo'yicha mashq qilishingiz mumkin.\n\n"
-      "Quyidagi tugmalardan birini tanlang yoki shunchaki xabar yozing!"
+      "Assalomu alaykum! Men sizning shaxsiy AI Yordamchingiz va IELTS bo'yicha maslahatchingizman.\n\n"
+      "Menga istalgan savolingizni berishingiz, suhbatlashishingiz yoki quyidagi bo'limlardan birini tanlashingiz mumkin:"
   )
 
   if update.message:
-    await update.message.reply_text(
-        text, parse_mode="Markdown", reply_markup=reply_markup
-    )
+    await update.message.reply_text(text, reply_markup=reply_markup)
 
 
-# Tugmalar bosilganda ishlaydigan mantiq
+# Tugmalar bosilganda ularga javob berish
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.callback_query
   await query.answer()
 
+  user_id = query.from_user.id
+  prompt_text = ""
+
   if query.data == "writing":
-    await query.message.reply_text(
-        "✍️ **IELTS Writing:** Esseingizni yuboring. Men uni Band Score va "
-        "grammatik xatolar bo'yicha chuqur tahlil qilib beraman!"
-    )
+    prompt_text = "Menga IELTS Writing (Task 1 yoki Task 2) bo'yicha qanday yordam bera olishingni va esseni qanday baholashingni tushuntirib ber."
   elif query.data == "speaking":
-    await query.message.reply_text(
-        "🗣 **IELTS Speaking:** Menga matn yozing yoki savol bering, birgalikda mashq qilamiz!"
-    )
+    prompt_text = "IELTS Speaking bo'yicha muloqot mashqini boshlaylik. Menga birinchi savolingni ber."
   elif query.data == "vocab":
-    await query.message.reply_text(
-        "📚 **Vocabulary:** Qaysi mavzuda (Education, Technology va h.k.) Band 7-9 so'zlar kerak?"
-    )
+    prompt_text = "IELTS uchun Band 7-9 darajadagi foydali so'zlar va iboralarni taqdim etish bo'limini tushuntir."
   elif query.data == "tips":
-    await query.message.reply_text(
-        "💡 **IELTS Tips:** Qaysi bo'lim (Writing, Speaking, Reading, Listening) bo'yicha maslahat kerak?"
-    )
+    prompt_text = "IELTS imtihonida yuqori ball olish uchun eng muhim va foydali maslahatlarni aytib ber."
+
+  # AI orqali tugmaga mos va xotirani hisobga olgan holda javob yaratish
+  bot_reply = get_ai_response(user_id, prompt_text)
+  await query.message.reply_text(bot_reply)
 
 
-# Xabarlarni qayta ishlash
+# Matnli xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user_id = update.effective_user.id
   user_text = update.message.text
 
-  # AI orqali javob olish
-  reply = ask_ai(user_text)
-
-  if reply:
-    await update.message.reply_text(reply)
-  else:
-    await update.message.reply_text(
-        "⚠️ AI serverlariga ulanib bo'lmadi. Render'da GROQ_API_KEY o'zgaruvchisi "
-        "to'g'ri saqlanganini tekshiring."
-    )
+  bot_reply = get_ai_response(user_id, user_text)
+  await update.message.reply_text(bot_reply)
 
 
 if __name__ == "__main__":
   application = ApplicationBuilder().token(TOKEN).build()
 
+  # Handlerlar
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CallbackQueryHandler(button_click))
   application.add_handler(
