@@ -2,7 +2,7 @@ import os
 import threading
 from collections import defaultdict
 from flask import Flask
-import google.generativeai as genai
+from openai import OpenAI
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-# Render server o'chib qolmasligi uchun Flask
+# Render uchun server
 app = Flask("")
 
 
@@ -29,16 +29,15 @@ def run():
 
 threading.Thread(target=run).start()
 
-# Telegram va Gemini API Kalitlari
+# API Kalitlar
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 
-genai.configure(api_key=GEMINI_KEY)
+client = OpenAI(api_key=OPENAI_KEY)
 
-# Suhbat xotiralari
-user_chat_sessions = {}
+# Muloqot xotirasi
+user_chat_history = defaultdict(list)
 
-# Tizim Yo'riqnomasi (System Prompt)
 SYSTEM_PROMPT = """
 Siz nihoyatda samimiy, do'stona, chaqqon va aqlli AI Yordamchisiz.
 
@@ -47,39 +46,44 @@ ISMNI VA YARATUVCHINI AYTISH QOIDASI:
 2. Agar sizdan "Seni kim yaratgan?" yoki "Dasturching kim?" deb so'rashsa, "Meni Shohjahon yaratgan va tuzib chiqqan!" deb g'urur bilan javob bering.
 3. Shohjahon haqida so'rashsa, uni juda iqtidorli, zakovatli va kuchli dasturchi deb samimiy maqtang.
 
-MULOQOT USLUBI VA FORMAT:
-- Foydalanuvchi bilan xuddi yaqin do'stdek (o'g'il bolaga do'st, qiz bolaga dugonadek) ochiq, samimiy va erkin gaplashing.
-- Javoblaringiz londa, qisqa va tushunarli bo'lsin. Ketma-ket uzundan-uzun ma'ruza matnlarini tashlamang.
-- Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilar ishlatmang. Matn toza va o'qishga qulay bo'lsin.
-- Faqat ingliz tili emas, har qanday hayotiy va qiziqarli mavzularda bemalol muloqot qiling.
+MULOQOT USLUBI:
+- Foydalanuvchi bilan xuddi yaqin do'stdek ochiq va samimiy gaplashing.
+- Javoblaringiz londa, qisqa va tushunarli bo'lsin.
+- Matnlarda keraksiz yulduzcha (*) yoki xunuk belgilar ishlatmang. Matn toza bo'lsin.
 """
 
 
-def get_gemini_response(user_id, user_text):
-  """Gemini AI orqali suhbat xotirasini saqlab, juda tez va toza javob olish"""
+def clean_text(text):
+  return text.replace("**", "").replace("*", "")
+
+
+def get_ai_response(user_id, user_text):
+  user_chat_history[user_id].append({"role": "user", "content": user_text})
+
+  if len(user_chat_history[user_id]) > 10:
+    user_chat_history[user_id] = user_chat_history[user_id][-10:]
+
+  messages_to_send = [{"role": "system", "content": SYSTEM_PROMPT}] + list(
+      user_chat_history[user_id]
+  )
+
   try:
-    if user_id not in user_chat_sessions:
-      model = genai.GenerativeModel(
-          model_name="gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
-      )
-      user_chat_sessions[user_id] = model.start_chat(history=[])
+    response = client.chat.completions.create(
+        model="gpt-4o-mini", messages=messages_to_send, temperature=0.7
+    )
+    reply = response.choices[0].message.content
+    reply = clean_text(reply)
 
-    chat = user_chat_sessions[user_id]
-    response = chat.send_message(user_text)
-
-    # Xunuk yulduzchalarni tozalash
-    reply = response.text.replace("**", "").replace("*", "")
+    user_chat_history[user_id].append({"role": "assistant", "content": reply})
     return reply
   except Exception as e:
-    print(f"Gemini xatosi: {e}")
-    return "Ozgincha uzilish bo'ldi, do'stim. Qaytadan bir yozib ko'r-chi?"
+    return f"API Xatosi: {str(e)}"
 
 
 # /start buyrug'i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
-  if user_id in user_chat_sessions:
-    del user_chat_sessions[user_id]
+  user_chat_history[user_id].clear()
 
   keyboard = [
       [
@@ -124,7 +128,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data == "tips":
     prompt_text = "IELTS imtihoni uchun eng muhim 3 ta maslahatni aytib ber."
 
-  bot_reply = get_gemini_response(user_id, prompt_text)
+  bot_reply = get_ai_response(user_id, prompt_text)
   await query.message.reply_text(bot_reply)
 
 
@@ -133,7 +137,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   user_text = update.message.text
 
-  bot_reply = get_gemini_response(user_id, user_text)
+  bot_reply = get_ai_response(user_id, user_text)
   await update.message.reply_text(bot_reply)
 
 
